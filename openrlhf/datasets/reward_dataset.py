@@ -64,11 +64,13 @@ class RewardDataset(Dataset):
         strategy,
         input_template=None,
         is_dpo=False,
+        is_adpo=False,
         num_processors=8,
         multiple_of=1,
     ) -> None:
         super().__init__()
         self.is_dpo = is_dpo
+        self.is_adpo = is_adpo
         self.tokenizer = tokenizer
         self.strategy = strategy
         self.max_length = max_length
@@ -131,6 +133,8 @@ class RewardDataset(Dataset):
             "prompt": prompt,
             "chosen": chosen,
             "reject": reject,
+            "chosen_token_reward": prompt_id_len if self.is_adpo else None,
+            "rejected_token_reward": prompt_id_len if self.is_adpo else None,
             "extra": prompt_ids_len if self.is_dpo else margin,
         }
 
@@ -233,3 +237,69 @@ class RewardDataset(Dataset):
             packed_attention_masks = F.pad(packed_attention_masks, (0, padding_len), value=0)
 
         return packed_input_ids, packed_attention_masks, packed_seq_lens, extras
+
+
+    def token_collate_fn(self, item_list):
+        chosen_ids = []
+        chosen_masks = []
+        reject_ids = []
+        rejects_masks = []
+        extras = []
+        chosen_token_rewards = []
+        rejected_token_rewards = []
+        for chosen_id, chosen_mask, reject_id, rejects_mask, chosen_token_reward, rejected_token_reward, extra in item_list:
+            chosen_ids.append(chosen_id)
+            chosen_masks.append(chosen_mask)
+            reject_ids.append(reject_id)
+            rejects_masks.append(rejects_mask)
+            chosen_token_rewards.append(chosen_token_reward)
+            rejected_token_rewards.append(rejected_token_reward)
+            extras.append(extra)
+
+        if self.is_dpo:
+            padding_side = "right"
+        else:
+            padding_side = "left"
+        chosen_ids = zero_pad_sequences(chosen_ids, side=padding_side, value=self.tokenizer.pad_token_id)
+        chosen_masks = zero_pad_sequences(chosen_masks, side=padding_side)
+        reject_ids = zero_pad_sequences(reject_ids, side=padding_side, value=self.tokenizer.pad_token_id)
+        rejects_masks = zero_pad_sequences(rejects_masks, side=padding_side)
+        chosen_token_rewards = zero_pad_sequences(chosen_token_rewards, side=padding_side)
+        rejected_token_rewards = zero_pad_sequences(rejected_token_rewards, side=padding_side)
+        return chosen_ids, chosen_masks, reject_ids, rejects_masks, chosen_token_rewards, rejected_token_rewards, extras
+
+
+    def packing_token_collate_fn(self, item_list):
+        extras = []
+        chosen_ids = []
+        chosen_att_masks = []
+        chosen_seq_lens = []
+        rejected_ids = []
+        rejected_att_masks = []
+        rejected_seq_lens = []
+        index = 1
+
+        for chosen_id, chosen_mask, reject_id, rejects_mask, chosen_token_reward, rejected_token_reward, extra in item_list:
+            chosen_ids.append(chosen_id.flatten())
+            chosen_att_masks.append(torch.full_like(chosen_id.flatten(), index))
+            chosen_seq_lens.append(len(chosen_id.flatten()))
+            chosen_token_rewards.append(chosen_token_reward.flatten())
+            extras.append(extra)
+
+            rejected_ids.append(reject_id.flatten())
+            rejected_att_masks.append(torch.full_like(reject_id.flatten(), index + len(item_list)))
+            rejected_seq_lens.append(len(reject_id.flatten()))
+            rejected_token_rewards.append(rejected_token_reward.flatten())
+            index += 1
+
+        packed_input_ids = torch.cat(chosen_ids + rejected_ids, dim=0).unsqueeze(0)
+        packed_attention_masks = torch.cat(chosen_att_masks + rejected_att_masks, dim=0).unsqueeze(0)
+        packed_seq_lens = chosen_seq_lens + rejected_seq_lens
+        packed_token_rewards = torch.cat(chosen_token_rewards + rejected_token_rewards, dim=0).unsqueeze(0)
+
+        if self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0:
+            padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+            packed_input_ids = F.pad(packed_input_ids, (0, padding_len), value=self.tokenizer.pad_token_id)
+            packed_attention_masks = F.pad(packed_attention_masks, (0, padding_len), value=0)
+            packed_token_rewards = F.pad(packed_token_rewards, (0, padding_len), value=0)
+        return packed_input_ids, packed_attention_masks, packed_seq_lens,packed_token_rewards, extras
