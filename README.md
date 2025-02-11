@@ -1,6 +1,6 @@
 # Equilibrate RLHF Framework
 
-Welcome to the Equilibrate RLHF Framework repository. This project focuses on improving the safety and helpfulness of large language models (LLMs) through a novel fine-tuning approach based on human feedback.
+Welcome to the Equilibrate RLHF Framework repository. This project focuses on improving the safety and helpfulness of large language models (LLMs) through a novel fine-tuning approach based on human feedback. Our project is build based on OpenRLHF framework.
 
 ## Overview
 
@@ -31,6 +31,6 @@ This project includes example data that may be offensive or harmful. Please use 
 
 -- Bal-Safe around 10k including Hard examples collected from our apps, and constructed by LLM Deep Synthesis. (Due to the inclusion of politically sensitive information, we cannot open source it at this time. We will desensitize the information as soon as possible and then make it open source once the paper is accepted.)
 
-## Experiment results
+## Experimental verification
 ![The main results of our proposed approach in both safety and general performances.](imgs/results.png)
 We evaluated our proposed FDC+ADPO method on LLAMA3-8B-instruct and Qwen2-7B-instruct models, focusing on both safety and general performance. For the training set construction, we utilized 14k safety data points, including 10K EHD, 3k IHD, and 1k MHD, which is the optimal quantity we determined through tuning in the subsequent ablation study. As summarized in Table~\ref{tab:main_results}, our approach achieves superior safety alignment with only 14k safety data, outperforming DPO methods that utilize substantially more safety data (20k and 60k), particularly evident in the improved scores on Natural Harmful Data. For instance, achieving a safety score of 0.9020 on LLAMA3-8B-instruct compared to DPO's 0.7750 with 60k safety data. Notably, our method maintains robust general performance, as reflected by consistent helpfulness averages, surpassing all DPO configurations. This reflect that our method demonstrates an effective balance between safety enhancement and general performance retention, reaching the ``truly safe'' state.
